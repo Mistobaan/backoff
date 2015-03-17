@@ -23,6 +23,39 @@ import "time"
 //
 func Retry(f func() error, b BackOff) error { return RetryNotify(f, b, nil) }
 
+type ErrorHandler func(wait time.Duration, err error)
+
+type RetryStrategy struct {
+	b        BackOff
+	notify   ErrorHandler
+	attempts int
+}
+
+// RetryN Like Retry but will retry only up to N times
+func RetryN(n int, b BackOff, notify ErrorHandler, f func() error) error {
+	var err error
+	var next time.Duration
+
+	b.Reset()
+	for i := 0; i < n; i++ {
+		if err = f(); err == nil {
+			return nil
+		}
+
+		if next = b.NextBackOff(); next == Stop {
+			return err
+		}
+
+		if notify != nil {
+			notify(next, err)
+		}
+
+		time.Sleep(next)
+	}
+
+	return err
+}
+
 // RetryNotify calls notify function with the error and wait duration for each failed attempt before sleep.
 func RetryNotify(f func() error, b BackOff, notify func(err error, wait time.Duration)) error {
 	var err error
